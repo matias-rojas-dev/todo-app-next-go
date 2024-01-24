@@ -7,20 +7,27 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	db "github.com/matias-rojas-dev/todo-app-next-go/database"
+	"github.com/matias-rojas-dev/todo-app-next-go/models"
 )
 
-type Task struct {
-	ID     int    `json:"id"`
-	Name   string `json:"name"`
-	Status bool   `json:"status"`
+// Initialize the database connection
+func init() {
+	db.DBConnection()
 }
 
-var tasks []Task
-
+// Get all tasks from the database
 func getTasks(c *gin.Context) {
+	var tasks []models.Task
+	result := db.DB.Find(&tasks)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, tasks)
 }
 
+// Función para obtener una tarea por su ID
 func getTaskByID(c *gin.Context) {
 	taskID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -28,29 +35,32 @@ func getTaskByID(c *gin.Context) {
 		return
 	}
 
-	for _, task := range tasks {
-		if task.ID == taskID {
-			c.JSON(http.StatusOK, task)
-			return
-		}
+	var task models.Task
+	result := db.DB.First(&task, taskID)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
 	}
-
-	c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+	c.JSON(http.StatusOK, task)
 }
 
+// Función para crear una nueva tarea a partir de los datos en formato JSON del cuerpo de la solicitud
 func createTask(c *gin.Context) {
-	var newTask Task
+	var newTask models.Task
 	if err := c.ShouldBindJSON(&newTask); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task data"})
 		return
 	}
 
-	newTask.ID = len(tasks) + 1
-	newTask.Status = true
-	tasks = append(tasks, newTask)
+	result := db.DB.Create(&newTask)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
 	c.JSON(http.StatusCreated, newTask)
 }
 
+// Función para actualizar una tarea existente por su ID utilizando datos en formato JSON
 func updateTask(c *gin.Context) {
 	taskID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -58,42 +68,28 @@ func updateTask(c *gin.Context) {
 		return
 	}
 
-	var taskToUpdate *Task
-	for index, task := range tasks {
-		if task.ID == taskID {
-			taskToUpdate = &tasks[index]
-			break
-		}
-	}
-
-	if taskToUpdate == nil {
+	var task models.Task
+	result := db.DB.First(&task, taskID)
+	if result.Error != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
 		return
 	}
 
-	var requestBody map[string]interface{}
-	if err := c.ShouldBindJSON(&requestBody); err != nil {
+	var updateData map[string]interface{}
+	if err := c.ShouldBindJSON(&updateData); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid task data"})
 		return
 	}
 
-	for key, value := range requestBody {
-		switch key {
-		case "name":
-			if name, ok := value.(string); ok {
-				taskToUpdate.Name = name
-			}
-
-		case "status":
-			if status, ok := value.(bool); ok {
-				taskToUpdate.Status = status
-			}
-		}
+	result = db.DB.Model(&task).Updates(updateData)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
 	}
-
-	c.JSON(http.StatusOK, taskToUpdate)
+	c.JSON(http.StatusOK, task)
 }
 
+// Función para eliminar una tarea por su ID.
 func deleteTaskByID(c *gin.Context) {
 	taskID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -101,28 +97,17 @@ func deleteTaskByID(c *gin.Context) {
 		return
 	}
 
-	for index, task := range tasks {
-		if task.ID == taskID {
-			tasks = append(tasks[:index], tasks[index+1:]...)
-			c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
-			return
-		}
+	result := db.DB.Delete(&models.Task{}, taskID)
+	if result.Error != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+		return
 	}
-
-	c.JSON(http.StatusNotFound, gin.H{"error": "Task not found"})
+	c.JSON(http.StatusOK, gin.H{"message": "Task deleted"})
 }
 
 func main() {
 	router := gin.Default()
 	router.Use(cors.Default())
-
-	tasks = []Task{
-		{
-			ID:   1,
-			Name: "Tarea 1",
-			Status: true,
-		},
-	}
 
 	router.GET("/tasks", getTasks)
 	router.GET("/tasks/:id", getTaskByID)

@@ -1,0 +1,31 @@
+###
+# Get all tasks
+GET http://localhost:3001/tasks
+
+### 
+# Get a single task by ID
+GET http://localhost:3001/tasks/10
+
+###
+# Create a new task
+POST http://localhost:3001/tasks
+Content-Type: application/json
+
+{
+  "name": "Task 3",
+  "status": true
+}
+
+###
+# Update an existing task by ID
+PATCH http://localhost:3001/tasks/10
+Content-Type: application/json
+
+{
+  "name": "Updated Task Name",
+  "status": false
+}
+
+###
+# Delete a task by ID
+DELETE http://localhost:3001/tasks/10
